@@ -147,9 +147,10 @@ async function refreshLedger() {
     const data = await r.json();
     const C = CONFIG.COL;
     state.rows = (data.values || [])
-      .filter((v) => (v[C.DATE] || v[C.VENDOR] || v[C.AMOUNT]))
-      .map((v, i) => ({
-        i, date: v[C.DATE] || '', vendor: v[C.VENDOR] || '(미상)',
+      .map((v, i) => ({ v, rowNum: i + 2 }))
+      .filter(({ v }) => (v[C.DATE] || v[C.VENDOR] || v[C.AMOUNT]))
+      .map(({ v, rowNum }, i) => ({
+        i, rowNum, date: v[C.DATE] || '', vendor: v[C.VENDOR] || '(미상)',
         amount: Number(String(v[C.AMOUNT] || '').replace(/[^\d.-]/g, '')) || 0,
         vat: v[C.VAT] || '', category: v[C.CATEGORY] || '-', reason: v[C.REASON] || '',
         link: v[C.LINK] || '', rtype: v[C.RTYPE] || '', status: v[C.STATUS] || '', memo: v[C.MEMO] || '',
@@ -187,9 +188,47 @@ function renderList() {
         ${r.cardIssuer || r.cardNo ? '결제: ' + [r.cardIssuer, r.cardNo].filter(Boolean).join(' ') + '<br>' : ''}
         ${r.approval ? '승인번호: ' + r.approval + '<br>' : ''}
         ${r.link ? `<a href="${r.link}" target="_blank" rel="noopener">증빙 사진 보기 ↗</a>` : ''}
+        <div class="status-actions">
+          현재 상태: <b>${r.status || '-'}</b><br>
+          <button class="btn-status ok" data-status="확인완료">✓ 확인완료</button>
+          <button class="btn-status no" data-status="제외">✕ 제외</button>
+          <button class="btn-status" data-status="자동입력">↩ 복원</button>
+        </div>
       </div>`;
     li.addEventListener('click', () => li.classList.toggle('open'));
+    li.querySelectorAll('.btn-status').forEach((btn) => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        setStatus(r, btn.dataset.status);
+      });
+    });
     ul.appendChild(li);
+  }
+}
+
+/* ---------- 결재: 확인상태 변경 (Sheets 쓰기) ---------- */
+async function setStatus(row, newStatus) {
+  try {
+    // 안전장치: 시트의 해당 행이 아직 같은 데이터인지 확인 (행 밀림 방지)
+    const checkUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(`경비장부!A${row.rowNum}:C${row.rowNum}`)}`;
+    const chk = await (await gfetch(checkUrl)).json();
+    const cur = (chk.values && chk.values[0]) || [];
+    const sameAmount = String(Number(String(cur[2] || '').replace(/[^\d.-]/g, '')) || 0) === String(row.amount);
+    if (String(cur[1] || '(미상)') !== row.vendor || !sameAmount) {
+      toast('목록이 변경되어 새로고침합니다. 다시 시도해주세요');
+      refreshLedger();
+      return;
+    }
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(`경비장부!I${row.rowNum}`)}?valueInputOption=USER_ENTERED`;
+    await gfetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [[newStatus]] }),
+    });
+    toast(`${row.vendor} → ${newStatus} 처리됨`);
+    refreshLedger();
+  } catch (e) {
+    toast('상태 변경 실패: ' + e.message);
   }
 }
 
