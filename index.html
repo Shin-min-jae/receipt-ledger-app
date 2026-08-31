@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a7f5a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="영수증장부">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<title>영수증장부</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">🧾 영수증장부</div>
+  <div class="topbar-right">
+    <button id="btn-install" class="btn-ghost" hidden>앱 설치</button>
+    <button id="btn-login" class="btn-primary" hidden>구글 로그인</button>
+    <span id="login-state" class="login-dot" title="로그인 상태"></span>
+  </div>
+</header>
+
+<main id="view-root">
+  <!-- 올리기 탭 -->
+  <section id="tab-upload" class="tab-panel">
+    <div class="upload-hero">
+      <p class="hero-text">영수증을 찍으면<br>자동으로 장부에 기록됩니다</p>
+      <label class="big-cam" for="file-camera">📷<span>영수증 촬영</span></label>
+      <input type="file" id="file-camera" accept="image/*" capture="environment" hidden>
+      <label class="btn-ghost gallery" for="file-gallery">갤러리에서 선택 (여러 장 가능)</label>
+      <input type="file" id="file-gallery" accept="image/*,application/pdf" multiple hidden>
+    </div>
+    <ul id="upload-queue" class="upload-queue"></ul>
+    <p class="hint">업로드된 영수증은 5분 주기로 자동 분석됩니다. 결과는 <b>내역</b> 탭에서 확인하세요.</p>
+  </section>
+
+  <!-- 내역 탭 -->
+  <section id="tab-list" class="tab-panel" hidden>
+    <div class="list-tools">
+      <button id="btn-refresh" class="btn-ghost">↻ 새로고침</button>
+      <a id="btn-xlsx" class="btn-ghost" target="_blank" rel="noopener">⬇ 엑셀로 받기</a>
+    </div>
+    <div id="need-check-banner" class="banner-warn" hidden></div>
+    <ul id="ledger-list" class="ledger-list"></ul>
+    <p id="list-empty" class="hint" hidden>아직 기록이 없습니다. 영수증을 올려보세요.</p>
+  </section>
+
+  <!-- 집계 탭 -->
+  <section id="tab-stats" class="tab-panel" hidden>
+    <div class="month-nav">
+      <button id="month-prev" class="btn-ghost">‹</button>
+      <span id="month-label">-</span>
+      <button id="month-next" class="btn-ghost">›</button>
+    </div>
+    <div class="total-card">
+      <div class="total-label">이 달 경비 합계</div>
+      <div id="month-total" class="total-amount">0원</div>
+      <div id="month-count" class="total-sub"></div>
+    </div>
+    <ul id="stats-list" class="stats-list"></ul>
+    <p class="hint">※ 집계는 참고용입니다. 세액 계산·신고용 수치가 아닙니다.</p>
+  </section>
+</main>
+
+<nav class="bottombar">
+  <button class="nav-btn active" data-tab="upload">📷<span>올리기</span></button>
+  <button class="nav-btn" data-tab="list">📋<span>내역</span></button>
+  <button class="nav-btn" data-tab="stats">📊<span>집계</span></button>
+</nav>
+
+<!-- iOS 설치 안내 -->
+<div id="ios-guide" class="ios-guide" hidden>
+  <div class="ios-card">
+    <p><b>홈 화면에 앱으로 추가하기</b></p>
+    <p>Safari 하단의 <span class="ios-share">공유 버튼 ⎋</span>을 누르고<br><b>"홈 화면에 추가"</b>를 선택하세요.</p>
+    <button id="ios-close" class="btn-primary">알겠어요</button>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="config.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="app.js"></script>
+</body>
+</html>
