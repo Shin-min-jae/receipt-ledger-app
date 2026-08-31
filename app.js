@@ -153,6 +153,7 @@ async function refreshLedger() {
         amount: Number(String(v[C.AMOUNT] || '').replace(/[^\d.-]/g, '')) || 0,
         vat: v[C.VAT] || '', category: v[C.CATEGORY] || '-', reason: v[C.REASON] || '',
         link: v[C.LINK] || '', rtype: v[C.RTYPE] || '', status: v[C.STATUS] || '', memo: v[C.MEMO] || '',
+        cardIssuer: v[C.CARD_ISSUER] || '', cardNo: v[C.CARD_NO] || '', approval: v[C.APPROVAL] || '',
         month: (v[C.DATE] || '').slice(0, 7),
       }));
     state.months = [...new Set(state.rows.map((r2) => r2.month).filter((m) => /^\d{4}-\d{2}$/.test(m)))].sort().reverse();
@@ -169,19 +170,22 @@ function renderList() {
   const rows = [...state.rows].reverse();
   $('list-empty').hidden = rows.length > 0;
   const needCheck = rows.filter((r) => r.status === '확인필요').length;
+  const dupCheck = rows.filter((r) => r.status === '중복의심').length;
   const banner = $('need-check-banner');
-  banner.hidden = needCheck === 0;
-  if (needCheck) banner.textContent = `⚠ 확인이 필요한 항목이 ${needCheck}건 있습니다 (인식 실패 또는 영수증 아님)`;
+  banner.hidden = needCheck + dupCheck === 0;
+  if (needCheck + dupCheck) banner.textContent = `⚠ 검수 대기: 확인필요 ${needCheck}건 · 중복의심 ${dupCheck}건 (중복의심은 결재 전까지 집계 제외)`;
   for (const r of rows) {
     const li = document.createElement('li');
     li.className = 'ledger-item';
-    const badge = r.status === '확인필요' ? '<span class="badge check">확인필요</span>' : `<span class="badge">${r.category}</span>`;
+    const badge = (r.status === '확인필요' || r.status === '중복의심') ? `<span class="badge check">${r.status}</span>` : `<span class="badge">${r.category}</span>`;
     li.innerHTML = `
       <div class="li-row1"><span class="li-vendor">${r.vendor}</span><span class="li-amount">${fmtWon(r.amount)}</span></div>
       <div class="li-row2"><span>${r.date || '날짜없음'}</span>${badge}<span>${r.rtype}</span></div>
       <div class="li-detail">
         ${r.reason ? '분류근거: ' + r.reason + '<br>' : ''}
         ${r.vat ? '부가세: ' + r.vat + '원<br>' : ''}
+        ${r.cardIssuer || r.cardNo ? '결제: ' + [r.cardIssuer, r.cardNo].filter(Boolean).join(' ') + '<br>' : ''}
+        ${r.approval ? '승인번호: ' + r.approval + '<br>' : ''}
         ${r.link ? `<a href="${r.link}" target="_blank" rel="noopener">증빙 사진 보기 ↗</a>` : ''}
       </div>`;
     li.addEventListener('click', () => li.classList.toggle('open'));
@@ -195,7 +199,7 @@ function renderStats() {
   if (!state.months.length) { label.textContent = '데이터 없음'; $('month-total').textContent = '0원'; $('stats-list').innerHTML = ''; $('month-count').textContent = ''; return; }
   const month = state.months[state.monthIdx];
   label.textContent = month.replace('-', '년 ') + '월';
-  const rows = state.rows.filter((r) => r.month === month && r.status !== '제외');
+  const rows = state.rows.filter((r) => r.month === month && r.status !== '제외' && r.status !== '중복의심');
   const total = rows.reduce((s, r) => s + r.amount, 0);
   const needCheck = rows.filter((r) => r.status === '확인필요').length;
   $('month-total').textContent = fmtWon(total);
