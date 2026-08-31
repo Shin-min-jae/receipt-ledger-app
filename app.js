@@ -56,8 +56,17 @@ function showLogin(need) {
 function isLoggedIn() {
   return !!(state.token && Date.now() < state.tokenExp);
 }
+async function waitForTokenClient(ms = 8000) {
+  const t0 = Date.now();
+  while (!state.tokenClient && Date.now() - t0 < ms) {
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  return state.tokenClient;
+}
 async function ensureToken(interactive = true) {
   if (isLoggedIn()) return state.token;
+  const tc = await waitForTokenClient();
+  if (!tc) throw new Error('구글 로그인 모듈을 불러오지 못했습니다. 새로고침 후 다시 시도해주세요');
   return new Promise((resolve) => {
     let done = false;
     const finish = (v) => { if (!done) { done = true; resolve(v); } };
