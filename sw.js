@@ -1,5 +1,5 @@
 /* 영수증장부 SW — 앱 셸 캐시(네트워크 우선, 오프라인 폴백) */
-const CACHE = 'rcpt-shell-v5';
+const CACHE = 'rcpt-shell-v6';
 const SHELL = ['./index.html', './styles.css', './app.js', './config.js', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {
