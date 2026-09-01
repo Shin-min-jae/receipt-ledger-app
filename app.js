@@ -168,20 +168,33 @@ async function refreshLedger() {
 function renderList() {
   const ul = $('ledger-list');
   ul.innerHTML = '';
-  const rows = [...state.rows].reverse();
-  $('list-empty').hidden = rows.length > 0;
-  const needCheck = rows.filter((r) => r.status === '확인필요').length;
-  const dupCheck = rows.filter((r) => r.status === '중복의심').length;
+  const all = [...state.rows].reverse();
+  $('list-empty').hidden = all.length > 0;
+  const pending = all.filter((r) => r.status === '확인필요' || r.status === '중복의심');
+  const normal = all.filter((r) => r.status !== '확인필요' && r.status !== '중복의심');
   const banner = $('need-check-banner');
-  banner.hidden = needCheck + dupCheck === 0;
-  if (needCheck + dupCheck) banner.textContent = `⚠ 검수 대기: 확인필요 ${needCheck}건 · 중복의심 ${dupCheck}건 (중복의심은 결재 전까지 집계 제외)`;
-  for (const r of rows) {
+  banner.hidden = pending.length === 0;
+  if (pending.length) {
+    const dupCheck = pending.filter((r) => r.status === '중복의심').length;
+    banner.textContent = `⚠ 검수함 ${pending.length}건 — 아래에서 바로 결재하세요` + (dupCheck ? ` (중복의심 ${dupCheck}건은 결재 전까지 집계 제외)` : '');
+  }
+  const addLabel = (text) => {
     const li = document.createElement('li');
-    li.className = 'ledger-item';
+    li.className = 'section-label';
+    li.textContent = text;
+    ul.appendChild(li);
+  };
+  if (pending.length) addLabel(`⚠ 검수함 (${pending.length})`);
+  const renderRows = (list, isPending) => {
+  for (const r of list) {
+    const li = document.createElement('li');
+    li.className = 'ledger-item' + (isPending ? ' pending' : '');
     const badge = (r.status === '확인필요' || r.status === '중복의심') ? `<span class="badge check">${r.status}</span>` : `<span class="badge">${r.category}</span>`;
+    const dupWarn = (r.status === '중복의심' && r.reason) ? `<div class="dup-warn">⚠ ${r.reason}</div>` : '';
     li.innerHTML = `
       <div class="li-row1"><span class="li-vendor">${r.vendor}</span><span class="li-amount">${fmtWon(r.amount)}</span></div>
       <div class="li-row2"><span>${r.date || '날짜없음'}</span>${badge}<span>${r.rtype}</span></div>
+      ${dupWarn}
       <div class="li-detail">
         ${r.reason ? '분류근거: ' + r.reason + '<br>' : ''}
         ${r.vat ? '부가세: ' + r.vat + '원<br>' : ''}
@@ -202,8 +215,13 @@ function renderList() {
         setStatus(r, btn.dataset.status);
       });
     });
+    if (isPending) li.classList.add('open'); // 검수함 항목은 결재 버튼이 바로 보이게 펼침
     ul.appendChild(li);
   }
+  };
+  renderRows(pending, true);
+  if (normal.length && pending.length) addLabel('전체 내역');
+  renderRows(normal, false);
 }
 
 /* ---------- 결재: 확인상태 변경 (Sheets 쓰기) ---------- */
