@@ -9,6 +9,7 @@ const state = {
   rows: [],          // 경비장부 파싱 결과
   months: [],        // 데이터에 존재하는 월 목록 (내림차순)
   monthIdx: 0,
+  filter: null,      // 집계 드릴다운 필터 {month, category}
   deferredInstall: null,
 };
 
@@ -126,6 +127,7 @@ function bindUpload() {
     $(id).addEventListener('change', (ev) => {
       const files = [...ev.target.files];
       if (!files.length) return;
+      if (state.demo) { ev.target.value = ''; toast('데모 모드 — 업로드는 실제 계정 연결 후 가능합니다'); return; }
       if (!isLoggedIn()) {
         ev.target.value = '';
         toast('구글 로그인을 먼저 해주세요');
@@ -168,7 +170,16 @@ async function refreshLedger() {
 function renderList() {
   const ul = $('ledger-list');
   ul.innerHTML = '';
-  const all = [...state.rows].reverse();
+  let all = [...state.rows].reverse();
+  const chip = $('filter-chip');
+  if (state.filter) {
+    all = all.filter((r) => r.month === state.filter.month && r.category === state.filter.category);
+    chip.hidden = false;
+    chip.innerHTML = `🔎 ${state.filter.month.replace('-', '년 ')}월 · ${state.filter.category} — ${all.length}건 <button id="filter-clear">✕ 전체 보기</button>`;
+    chip.querySelector('#filter-clear').addEventListener('click', () => { state.filter = null; renderList(); });
+  } else {
+    chip.hidden = true;
+  }
   $('list-empty').hidden = all.length > 0;
   const pending = all.filter((r) => r.status === '확인필요' || r.status === '중복의심');
   const normal = all.filter((r) => r.status !== '확인필요' && r.status !== '중복의심');
@@ -226,6 +237,7 @@ function renderList() {
 
 /* ---------- 결재: 확인상태 변경 (Sheets 쓰기) ---------- */
 async function setStatus(row, newStatus) {
+  if (state.demo) { toast('데모 모드 — 실제로 저장되지는 않습니다'); return; }
   try {
     // 안전장치: 시트의 해당 행이 아직 같은 데이터인지 확인 (행 밀림 방지)
     const checkUrl = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SHEET_ID}/values/${encodeURIComponent(`경비장부!A${row.rowNum}:C${row.rowNum}`)}`;
@@ -268,7 +280,13 @@ function renderStats() {
   ul.innerHTML = '';
   Object.entries(byCat).sort((a, b) => b[1] - a[1]).forEach(([cat, amt]) => {
     const li = document.createElement('li');
-    li.innerHTML = `<div class="stat-cell"><div class="cat">${cat}</div><div class="bar"><i style="width:${Math.round((amt / max) * 100)}%"></i></div></div><span class="stat-amt">${fmtWon(amt)}</span>`;
+    li.className = 'stat-row';
+    li.innerHTML = `<div class="stat-cell"><div class="cat">${cat} <span class="drill">›</span></div><div class="bar"><i style="width:${Math.round((amt / max) * 100)}%"></i></div></div><span class="stat-amt">${fmtWon(amt)}</span>`;
+    li.addEventListener('click', () => {
+      document.querySelector('.nav-btn[data-tab="list"]')?.click();
+      state.filter = { month, category: cat };
+      renderList();
+    });
     ul.appendChild(li);
   });
 }
@@ -279,6 +297,8 @@ function bindNav() {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b === btn));
       for (const t of ['upload', 'list', 'stats']) $('tab-' + t).hidden = t !== btn.dataset.tab;
+      state.filter = null;
+      if (state.demo) { renderList(); renderStats(); return; }
       if (btn.dataset.tab === 'list' || btn.dataset.tab === 'stats') refreshLedger();
     });
   });
@@ -312,8 +332,41 @@ function bindInstall() {
   if (isIos && !standalone && !seen) $('ios-guide').hidden = false;
 }
 
+/* ---------- 데모 모드 (?demo=1): 로그인 없이 샘플 데이터로 화면 체험 ---------- */
+function loadDemoData() {
+  state.demo = true;
+  showLogin(false);
+  const D = [
+    ['2026-08-03', '패스트파이브 강남2호점', 385000, 35000, '임차료', '사무공간 월 이용료(세금계산서 발행분)', '자동입력', '신한카드', '', ''],
+    ['2026-08-11', 'Anthropic, PBC', 27400, '', '지급수수료', '업무용 AI 구독 해외결제', '자동입력', '현대카드', '1234-56**-****-7890', ''],
+    ['2026-08-16', '해운대 진미횟집', 78000, '', '접대비', '거래처 저녁 미팅으로 판단', '자동입력', '현대카드', '1234-56**-****-7890', '55120987'],
+    ['2026-08-16', '해운대 진미횟집', 78000, '', '접대비', '중복의심(승인번호 일치: 2026-08-16 해운대 진미횟집 78000원과 동일 거래)', '중복의심', '현대카드', '1234-56**-****-7890', '55120987'],
+    ['2026-08-22', '쿠팡', 329000, 29909, '비품/장비', 'LG 27인치 모니터 구매', '자동입력', '국민카드', '5412-33**-****-1122', '30012345'],
+    ['', '(흐린 사진)', '', '', '분류불가(확인필요)', '이미지가 흐려 금액 판독 불가', '확인필요', '', '', ''],
+    ['2026-08-27', '이디야커피 역삼점', 7000, 636, '접대비', '외주 상담 미팅', '확인완료', '현대카드', '1234-56**-****-7890', '77120011'],
+  ];
+  state.rows = D.map((d, i) => ({
+    i, rowNum: i + 2, date: d[0], vendor: d[1], amount: Number(d[2]) || 0, vat: d[3],
+    category: d[4], reason: d[5], link: '', rtype: '카드영수증', status: d[6], memo: '',
+    cardIssuer: d[7], cardNo: d[8], approval: d[9], month: (d[0] || '').slice(0, 7),
+  }));
+  state.months = ['2026-08'];
+  state.monthIdx = 0;
+  renderList();
+  renderStats();
+  toast('데모 모드 — 샘플 데이터입니다', 3000);
+}
+
 /* ---------- 시작 ---------- */
 window.addEventListener('load', () => {
-  bindNav(); bindUpload(); bindInstall(); initAuth();
+  bindNav(); bindUpload(); bindInstall();
+  const params = new URLSearchParams(location.search);
+  if (params.has('demo')) {
+    loadDemoData();
+    const tab = params.get('tab');
+    if (tab) document.querySelector(`.nav-btn[data-tab="${tab}"]`)?.click();
+  } else {
+    initAuth();
+  }
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 });
